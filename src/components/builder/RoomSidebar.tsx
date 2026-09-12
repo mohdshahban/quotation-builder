@@ -8,6 +8,9 @@ import {
   Copy, 
   MoreVertical, 
   Building,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { useQuotation } from '../../context/QuotationContext';
 import { countRoomSelectedItems, calculateRoomSubtotal } from '../../utils/calculations';
@@ -24,6 +27,8 @@ export const RoomSidebar: React.FC = () => {
     addRoom,
     deleteRoom,
     duplicateRoom,
+    reorderRooms,
+    moveRoom,
     projectDetails,
   } = useQuotation();
 
@@ -35,6 +40,10 @@ export const RoomSidebar: React.FC = () => {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomType, setNewRoomType] = useState('bedroom');
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag and drop state
+  const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
+  const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null);
 
   useEffect(() => {
     if (editingRoomId && editInputRef.current) {
@@ -63,6 +72,46 @@ export const RoomSidebar: React.FC = () => {
     } else if (e.key === 'Escape') {
       setEditingRoomId(null);
     }
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, roomId: string) => {
+    if (editingRoomId) return;
+    setDraggedRoomId(roomId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', roomId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, roomId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedRoomId && draggedRoomId !== roomId && dragOverRoomId !== roomId) {
+      setDragOverRoomId(roomId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, roomId: string) => {
+    e.preventDefault();
+    if (dragOverRoomId === roomId) {
+      setDragOverRoomId(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetRoomId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sourceRoomId = draggedRoomId || e.dataTransfer.getData('text/plain');
+    if (sourceRoomId && sourceRoomId !== targetRoomId) {
+      reorderRooms(sourceRoomId, targetRoomId);
+    }
+    setDraggedRoomId(null);
+    setDragOverRoomId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedRoomId(null);
+    setDragOverRoomId(null);
   };
 
   const handleAddRoomSubmit = (e: React.FormEvent) => {
@@ -117,13 +166,18 @@ export const RoomSidebar: React.FC = () => {
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
           
           <div className="px-4 py-3 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                Room Configuration
-              </span>
-              <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                {rooms.length}
-              </span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Room Configuration
+                </span>
+                <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                  {rooms.length}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                ↕️ Drag to reorder room sequence
+              </p>
             </div>
             <button
               onClick={() => setIsAddRoomModalOpen(true)}
@@ -136,30 +190,48 @@ export const RoomSidebar: React.FC = () => {
 
           {/* Rooms Navigation List */}
           <div className="p-2 space-y-1.5 max-h-[calc(100vh-280px)] overflow-y-auto">
-            {rooms.map((room) => {
+            {rooms.map((room, roomIndex) => {
               const isActive = room.id === activeRoomId;
               const selectedCount = countRoomSelectedItems(room);
               const roomSubtotal = calculateRoomSubtotal(room);
               const hasItems = selectedCount > 0;
               const isEditing = editingRoomId === room.id;
+              const isDraggingThis = draggedRoomId === room.id;
+              const isDragOverThis = dragOverRoomId === room.id && draggedRoomId !== room.id;
 
               return (
                 <div
                   key={room.id}
+                  draggable={!isEditing}
+                  onDragStart={(e) => handleDragStart(e, room.id)}
+                  onDragOver={(e) => handleDragOver(e, room.id)}
+                  onDragLeave={(e) => handleDragLeave(e, room.id)}
+                  onDrop={(e) => handleDrop(e, room.id)}
+                  onDragEnd={handleDragEnd}
                   onClick={() => {
                     if (!isEditing) setActiveRoomId(room.id);
                   }}
-                  className={`relative group rounded-xl p-3 cursor-pointer transition-all border ${
-                    isActive
+                  className={`relative group rounded-xl p-2.5 sm:p-3 cursor-grab active:cursor-grabbing transition-all border select-none ${
+                    isDraggingThis
+                      ? 'opacity-40 scale-95 border-rose-400 border-dashed bg-rose-50/50 shadow-none'
+                      : isDragOverThis
+                      ? 'border-rose-500 ring-2 ring-rose-400/50 bg-rose-50/40 scale-[1.01] shadow-md'
+                      : isActive
                       ? 'bg-blue-50/70 border-blue-200 shadow-xs ring-1 ring-blue-400/30'
                       : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-200/70'
                   }`}
+                  title="Click to select room or drag to reorder"
                 >
                   <div className="flex items-center justify-between gap-2">
                     
-                    {/* Left: Checkmark Icon Pill + Room Name */}
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {/* Left: Drag Grip + Checkmark Icon Pill + Room Name */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                       
+                      {/* Drag Grip Handle */}
+                      <div className="text-slate-300 group-hover:text-slate-500 hover:text-rose-500 p-0.5 rounded transition-colors shrink-0">
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </div>
+
                       {/* Checkmark box matching screenshot */}
                       <div
                         className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors ${
@@ -238,7 +310,39 @@ export const RoomSidebar: React.FC = () => {
                                 setMenuOpenRoomId(null);
                               }}
                             />
-                            <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-30 animate-fade-in text-xs font-semibold">
+                            <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-30 animate-fade-in text-xs font-semibold">
+                              
+                              {/* Reorder actions */}
+                              {roomIndex > 0 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveRoom(room.id, 'up');
+                                    setMenuOpenRoomId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Move Up</span>
+                                </button>
+                              )}
+
+                              {roomIndex < rooms.length - 1 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveRoom(room.id, 'down');
+                                    setMenuOpenRoomId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Move Down</span>
+                                </button>
+                              )}
+
+                              <div className="my-1 border-t border-slate-100" />
+
                               <button
                                 onClick={(e) => startEditing(room.id, room.name, e)}
                                 className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-rose-50 hover:text-rose-600 flex items-center gap-2"
@@ -261,7 +365,7 @@ export const RoomSidebar: React.FC = () => {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (window.confirm(`Delete "${room.name}"?`)) {
+                                    if (window.confirm(`Delete "${room.name}" from this quotation?`)) {
                                       deleteRoom(room.id);
                                     }
                                     setMenuOpenRoomId(null);
@@ -269,7 +373,7 @@ export const RoomSidebar: React.FC = () => {
                                   className="w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 flex items-center gap-2"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
-                                  <span>Delete</span>
+                                  <span>Delete Room</span>
                                 </button>
                               )}
                             </div>

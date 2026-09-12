@@ -17,6 +17,8 @@ interface QuotationContextType {
   addRoom: (name: string, type?: string, icon?: string) => string;
   deleteRoom: (roomId: string) => void;
   duplicateRoom: (roomId: string) => void;
+  reorderRooms: (activeRoomId: string, overRoomId: string) => void;
+  moveRoom: (roomId: string, direction: 'up' | 'down') => void;
   toggleItemSelection: (roomId: string, itemId: string, isSelected?: boolean) => void;
   updateItemQuantity: (roomId: string, itemId: string, quantity: number) => void;
   updateItemVariant: (roomId: string, itemId: string, variantId: string) => void;
@@ -45,7 +47,7 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 
   const [activeRoomId, setActiveRoomId] = useState<string>(
-    activeProject?.rooms[0]?.id || 'room-living'
+    activeProject?.rooms[0]?.id || adminRooms[0]?.id || 'room-living'
   );
 
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(2); // Default to Step 2 (Scope of Work)
@@ -55,9 +57,89 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (activeProject) {
       setProjectDetails(activeProject.projectDetails);
       setRooms(activeProject.rooms);
-      setActiveRoomId(activeProject.rooms[0]?.id || 'room-living');
+      setActiveRoomId(activeProject.rooms[0]?.id || adminRooms[0]?.id || 'room-living');
     }
   }, [activeProject?.id]);
+
+  // Synchronize Studio Rooms whenever Admin updates room configuration templates in Catalog Admin
+  useEffect(() => {
+    if (!adminRooms || adminRooms.length === 0) return;
+
+    setRooms(prevRooms => {
+      // Map each room from adminRooms to project room in exact default sequence
+      const updatedRooms: Room[] = adminRooms.map(adminRoom => {
+        const existing = prevRooms.find(
+          r => r.id === adminRoom.id || r.name.toLowerCase() === adminRoom.name.toLowerCase()
+        );
+
+        if (!existing) {
+          // New room added in Catalog Admin (e.g. Entrance)
+          return {
+            ...adminRoom,
+            items: adminRoom.items.map(item => {
+              const latestCard = catalog.find(c => c.id === item.cardId);
+              const latestVariant = latestCard?.variants.find(v => v.id === item.selectedVariantId);
+              const rate = latestVariant ? latestVariant.rate : (latestCard ? latestCard.baseRate : item.unitRate);
+              return {
+                ...item,
+                id: item.id || `cfg-${item.cardId}-${Math.random().toString(36).substring(2, 9)}`,
+                unitRate: rate,
+                calculatedPrice: item.quantity * rate,
+              };
+            }),
+          };
+        }
+
+        // Merge existing studio room with admin template:
+        // 1. Template items defined in adminRoom
+        const templateItems = adminRoom.items.map(adminItem => {
+          const existingItem = existing.items.find(i => i.cardId === adminItem.cardId);
+          const latestCard = catalog.find(c => c.id === adminItem.cardId);
+          const selectedVariantId = existingItem ? existingItem.selectedVariantId : adminItem.selectedVariantId;
+          const latestVariant = latestCard?.variants.find(v => v.id === selectedVariantId);
+          const rate = latestVariant ? latestVariant.rate : (latestCard ? latestCard.baseRate : adminItem.unitRate);
+          const qty = existingItem ? existingItem.quantity : adminItem.quantity;
+          const isSelected = existingItem !== undefined ? existingItem.isSelected : adminItem.isSelected;
+
+          return {
+            ...adminItem,
+            id: existingItem ? existingItem.id : (adminItem.id || `cfg-${adminItem.cardId}-${Math.random().toString(36).substring(2, 9)}`),
+            quantity: qty,
+            unitRate: rate,
+            calculatedPrice: qty * rate,
+            isSelected: isSelected,
+            selectedVariantId: selectedVariantId,
+            selectedVariantName: latestVariant?.name || adminItem.selectedVariantName,
+            scopeType: adminItem.scopeType,
+          };
+        });
+
+        // 2. Custom items that user added specifically in studio
+        const customItems = existing.items.filter(
+          i => i.isCustom || !adminRoom.items.some(ai => ai.cardId === i.cardId)
+        );
+
+        return {
+          ...existing,
+          id: adminRoom.id,
+          name: adminRoom.name,
+          type: adminRoom.type,
+          icon: adminRoom.icon,
+          areaSqft: adminRoom.areaSqft || existing.areaSqft,
+          items: [...templateItems, ...customItems],
+        };
+      });
+
+      // Also preserve any custom rooms user created specifically in studio that aren't in adminRooms
+      const userCustomRooms = prevRooms.filter(
+        r => r.id.startsWith('room-custom-') || !adminRooms.some(ar => ar.id === r.id || ar.name.toLowerCase() === r.name.toLowerCase())
+      );
+
+      const finalRooms = [...updatedRooms, ...userCustomRooms];
+      saveActiveProjectRooms(finalRooms);
+      return finalRooms;
+    });
+  }, [adminRooms, catalog]);
 
   // Keep activeRoomId valid if rooms change
   useEffect(() => {
@@ -149,6 +231,33 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return updated;
     });
     setActiveRoomId(newId);
+  };
+
+  const reorderRooms = (activeRoomId: string, overRoomId: string) => {
+    setRooms(prev => {
+      const fromIndex = prev.findIndex(r => r.id === activeRoomId);
+      const toIndex = prev.findIndex(r => r.id === overRoomId);
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
+  };
+
+  const moveRoom = (roomId: string, direction: 'up' | 'down') => {
+    setRooms(prev => {
+      const index = prev.findIndex(r => r.id === roomId);
+      if (index === -1) return prev;
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(index, 1);
+      updated.splice(targetIndex, 0, moved);
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const toggleItemSelection = (roomId: string, itemId: string, isSelected?: boolean) => {
@@ -340,6 +449,8 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         addRoom,
         deleteRoom,
         duplicateRoom,
+        reorderRooms,
+        moveRoom,
         toggleItemSelection,
         updateItemQuantity,
         updateItemVariant,

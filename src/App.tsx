@@ -71,12 +71,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <WorkspaceProvider>
-      <CatalogProvider>
+    <CatalogProvider>
+      <WorkspaceProvider>
         <QuotationProvider>
           <AppContent />
         </QuotationProvider>
-      </CatalogProvider>
-    </WorkspaceProvider>
+      </WorkspaceProvider>
+    </CatalogProvider>
   );
 }

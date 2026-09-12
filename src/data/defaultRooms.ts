@@ -67,14 +67,14 @@ export const generateDefaultRooms = (catalog: ItemCard[] = DEFAULT_CATALOG, temp
   if (templateRooms && templateRooms.length > 0) {
     return templateRooms.map(r => ({
       ...r,
-      id: `room-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: r.id,
       items: r.items.map(item => {
         const latestCard = catalog.find(c => c.id === item.cardId);
         const latestVariant = latestCard?.variants.find(v => v.id === item.selectedVariantId);
         const rate = latestVariant ? latestVariant.rate : (latestCard ? latestCard.baseRate : item.unitRate);
         return {
           ...item,
-          id: `cfg-${item.cardId}-${Math.random().toString(36).substring(2, 9)}`,
+          id: item.id || `cfg-${item.cardId}-${Math.random().toString(36).substring(2, 9)}`,
           unitRate: rate,
           calculatedPrice: item.quantity * rate,
         };

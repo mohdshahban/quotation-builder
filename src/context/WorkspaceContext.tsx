@@ -5,6 +5,7 @@ import { DEFAULT_STUDIO_SETTINGS, DEFAULT_TEAM_MEMBERS, generateDefaultProjects 
 import { ProjectDetails, Room } from '../types/quotation';
 import { generateDefaultRooms } from '../data/defaultRooms';
 import { DEFAULT_CATALOG } from '../data/defaultCatalog';
+import { useCatalog } from './CatalogContext';
 
 export type NavView = 'dashboard' | 'builder' | 'summary' | 'admin' | 'client_portal';
 
@@ -38,6 +39,8 @@ const LOCAL_STORAGE_USER_KEY = 'interior_studio_user_v2';
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { catalog, adminRooms } = useCatalog();
+
   const [projects, setProjects] = useState<ProjectQuotation[]>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_PROJECTS_KEY);
@@ -48,7 +51,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch (e) {
       console.error('Failed to parse saved projects:', e);
     }
-    return generateDefaultProjects();
+    return generateDefaultProjects(DEFAULT_CATALOG);
   });
 
   const [activeProjectId, setActiveProjectIdState] = useState<string>(() => {
@@ -119,7 +122,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const createProject = (details?: Partial<ProjectDetails>, initialRooms?: Room[]): ProjectQuotation => {
     const newId = `proj-${Date.now()}`;
-    const rooms = initialRooms || generateDefaultRooms(DEFAULT_CATALOG);
+    const rooms = initialRooms || generateDefaultRooms(catalog, adminRooms);
     
     const newProject: ProjectQuotation = {
       id: newId,

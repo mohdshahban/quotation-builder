@@ -1,5 +1,6 @@
 import { StudioSettings, TeamMember } from '../types/settings';
 import { ProjectQuotation } from '../types/project';
+import { Room } from '../types/quotation';
 import { generateDefaultRooms } from './defaultRooms';
 import { DEFAULT_CATALOG } from './defaultCatalog';
 
@@ -66,10 +67,10 @@ export const DEFAULT_STUDIO_SETTINGS: StudioSettings = {
   teamMembers: DEFAULT_TEAM_MEMBERS,
 };
 
-export const generateDefaultProjects = (): ProjectQuotation[] => {
-  const roomsForAjnara = generateDefaultRooms(DEFAULT_CATALOG);
-  const roomsForVilla = generateDefaultRooms(DEFAULT_CATALOG);
-  const roomsForCamellias = generateDefaultRooms(DEFAULT_CATALOG);
+export const generateDefaultProjects = (catalog: any = DEFAULT_CATALOG, templateRooms?: Room[]): ProjectQuotation[] => {
+  const roomsForAjnara = generateDefaultRooms(catalog, templateRooms);
+  const roomsForVilla = generateDefaultRooms(catalog, templateRooms);
+  const roomsForCamellias = generateDefaultRooms(catalog, templateRooms);
 
   return [
     {
