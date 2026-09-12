@@ -74,25 +74,40 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         if (!existing) {
           // New room added in Catalog Admin (e.g. Entrance)
+          const seenIds = new Set<string>();
+          const dedupedItems: ConfiguredItem[] = [];
+
+          for (const item of adminRoom.items) {
+            if (seenIds.has(item.cardId)) continue;
+            seenIds.add(item.cardId);
+
+            const latestCard = catalog.find(c => c.id === item.cardId);
+            const latestVariant = latestCard?.variants.find(v => v.id === item.selectedVariantId);
+            const rate = latestVariant ? latestVariant.rate : (latestCard ? latestCard.baseRate : item.unitRate);
+
+            dedupedItems.push({
+              ...item,
+              id: item.id || `cfg-${item.cardId}-${Math.random().toString(36).substring(2, 9)}`,
+              unitRate: rate,
+              calculatedPrice: item.quantity * rate,
+            });
+          }
+
           return {
             ...adminRoom,
-            items: adminRoom.items.map(item => {
-              const latestCard = catalog.find(c => c.id === item.cardId);
-              const latestVariant = latestCard?.variants.find(v => v.id === item.selectedVariantId);
-              const rate = latestVariant ? latestVariant.rate : (latestCard ? latestCard.baseRate : item.unitRate);
-              return {
-                ...item,
-                id: item.id || `cfg-${item.cardId}-${Math.random().toString(36).substring(2, 9)}`,
-                unitRate: rate,
-                calculatedPrice: item.quantity * rate,
-              };
-            }),
+            items: dedupedItems,
           };
         }
 
         // Merge existing studio room with admin template:
-        // 1. Template items defined in adminRoom
-        const templateItems = adminRoom.items.map(adminItem => {
+        // 1. Template items defined in adminRoom (deduplicated by cardId)
+        const templateCardIds = new Set<string>();
+        const templateItems: ConfiguredItem[] = [];
+
+        for (const adminItem of adminRoom.items) {
+          if (templateCardIds.has(adminItem.cardId)) continue;
+          templateCardIds.add(adminItem.cardId);
+
           const existingItem = existing.items.find(i => i.cardId === adminItem.cardId);
           const latestCard = catalog.find(c => c.id === adminItem.cardId);
           const selectedVariantId = existingItem ? existingItem.selectedVariantId : adminItem.selectedVariantId;
@@ -101,7 +116,7 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const qty = existingItem ? existingItem.quantity : adminItem.quantity;
           const isSelected = adminItem.isSelected !== undefined ? adminItem.isSelected : (existingItem !== undefined ? existingItem.isSelected : (latestCard?.scopeType === 'expert_pick'));
 
-          return {
+          templateItems.push({
             ...adminItem,
             id: existingItem ? existingItem.id : (adminItem.id || `cfg-${adminItem.cardId}-${Math.random().toString(36).substring(2, 9)}`),
             name: latestCard?.name || adminItem.name,
@@ -118,13 +133,21 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             scopeType: adminItem.scopeType || latestCard?.scopeType || 'expert_pick',
             materialSpec: latestCard?.materialSpec || adminItem.materialSpec,
             isCustom: latestCard?.isCustom || adminItem.isCustom || false,
-          };
-        });
+          });
+        }
 
-        // 2. Custom items that user added specifically in studio
-        const customItems = existing.items.filter(
-          i => i.isCustom || !adminRoom.items.some(ai => ai.cardId === i.cardId)
+        // 2. Custom items that user added specifically in studio (do NOT include items already in adminRoom)
+        const studioSpecificItems = existing.items.filter(
+          i => !templateCardIds.has(i.cardId) && !adminRoom.items.some(ai => ai.cardId === i.cardId)
         );
+
+        const seenStudioIds = new Set<string>();
+        const uniqueStudioItems = studioSpecificItems.filter(i => {
+          const key = i.cardId || i.id;
+          if (seenStudioIds.has(key)) return false;
+          seenStudioIds.add(key);
+          return true;
+        });
 
         return {
           ...existing,
@@ -133,7 +156,7 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           type: adminRoom.type,
           icon: adminRoom.icon,
           areaSqft: adminRoom.areaSqft || existing.areaSqft,
-          items: [...templateItems, ...customItems],
+          items: [...templateItems, ...uniqueStudioItems],
         };
       });
 

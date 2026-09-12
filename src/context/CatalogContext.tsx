@@ -63,7 +63,16 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          // Deduplicate items in each loaded room
+          return parsed.map((room: Room) => {
+            const seen = new Set<string>();
+            const uniqueItems = (room.items || []).filter(i => {
+              if (seen.has(i.cardId)) return false;
+              seen.add(i.cardId);
+              return true;
+            });
+            return { ...room, items: uniqueItems };
+          });
         }
       }
     } catch (e) {
@@ -97,7 +106,7 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     setCatalog(prev => [newCard, ...prev]);
 
-    // Automatically add this new card to relevant admin room templates
+    // Automatically add this new card to relevant admin room templates (preventing duplicate additions)
     setAdminRooms(prev =>
       prev.map(room => {
         const matches = 
@@ -105,7 +114,7 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
           newCard.defaultRooms.some(
             r => r.toLowerCase() === room.name.toLowerCase() || r.toLowerCase() === (room.type || '').toLowerCase()
           );
-        if (matches) {
+        if (matches && !room.items.some(i => i.cardId === newCard.id)) {
           const newItem = createConfiguredItemFromCard(newCard, undefined, newCard.scopeType === 'expert_pick');
           return {
             ...room,
