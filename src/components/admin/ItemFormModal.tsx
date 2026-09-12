@@ -2,16 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { ItemCard, ItemCategory, ItemVariant, ScopeType, UnitType } from '../../types/catalog';
 import { AVAILABLE_ICONS } from '../../utils/iconMap';
-import { Plus, Trash2, Layers, CheckSquare, Square } from 'lucide-react';
+import { useCatalog } from '../../context/CatalogContext';
+import { Plus, Trash2, Layers, CheckSquare, Square, Sparkles } from 'lucide-react';
 
 interface ItemFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (card: Omit<ItemCard, 'id'>, id?: string) => void;
+  onSave: (card: Omit<ItemCard, 'id'>, id?: string, targetRoomId?: string) => void;
   initialCard?: ItemCard | null;
+  targetRoomName?: string;
+  targetRoomId?: string;
 }
 
-const CATEGORIES: ItemCategory[] = [
+const DEFAULT_CATEGORIES: ItemCategory[] = [
   'Modular Woodwork',
   'Furniture',
   'False Ceiling',
@@ -23,28 +26,20 @@ const CATEGORIES: ItemCategory[] = [
   'Decor & Soft Furnishings',
 ];
 
-const ROOM_OPTIONS = [
-  'Living Room',
-  'Master Bedroom',
-  'Kids Room',
-  'Bedroom',
-  'Kitchen',
-  'Dining',
-  'Washroom 1',
-  'Washroom 2',
-  'Foyer',
-  'Balcony',
-  '*',
-];
-
 export const ItemFormModal: React.FC<ItemFormModalProps> = ({
   isOpen,
   onClose,
   onSave,
   initialCard,
+  targetRoomName,
+  targetRoomId,
 }) => {
+  const { adminRooms, catalog } = useCatalog();
+
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<ItemCategory>('Modular Woodwork');
+  const [category, setCategory] = useState<string>('Modular Woodwork');
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [icon, setIcon] = useState('Tv');
   const [description, setDescription] = useState('');
   const [unit, setUnit] = useState<UnitType>('Unit');
@@ -58,10 +53,41 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
   const [hardware, setHardware] = useState('');
   const [warranty, setWarranty] = useState('');
 
+  // Collect all unique room options from adminRooms + fallback presets
+  const dynamicRoomOptions = [
+    '*',
+    ...Array.from(new Set([
+      ...adminRooms.map(r => r.name),
+      'Living Room',
+      'Master Bedroom',
+      'Kids Room',
+      'Bedroom',
+      'Kitchen',
+      'Washroom 1',
+      'Washroom 2',
+      'Foyer',
+      'Balcony',
+      'Dining',
+    ]))
+  ];
+
+  // Collect categories from default + existing catalog
+  const allCategories = Array.from(new Set([
+    ...DEFAULT_CATEGORIES,
+    ...catalog.map(c => c.category)
+  ]));
+
   useEffect(() => {
     if (initialCard) {
       setName(initialCard.name);
-      setCategory(initialCard.category);
+      if (allCategories.includes(initialCard.category as any)) {
+        setCategory(initialCard.category);
+        setIsCustomCategory(false);
+      } else {
+        setCategory('CUSTOM');
+        setCustomCategoryInput(initialCard.category);
+        setIsCustomCategory(true);
+      }
       setIcon(initialCard.icon);
       setDescription(initialCard.description || '');
       setUnit(initialCard.unit);
@@ -81,12 +107,14 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
     } else {
       setName('');
       setCategory('Modular Woodwork');
-      setIcon('Tv');
+      setIsCustomCategory(false);
+      setCustomCategoryInput('');
+      setIcon('Sparkles');
       setDescription('');
       setUnit('Unit');
       setBaseRate(15000);
       setScopeType('expert_pick');
-      setDefaultRooms(['*']);
+      setDefaultRooms(targetRoomName ? [targetRoomName] : ['*']);
       setEnableVariants(false);
       setVariants([]);
       setCoreMaterial('Century HDHMR / BWP Marine Ply');
@@ -94,7 +122,7 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
       setHardware('Hettich Soft-Close Hardware');
       setWarranty('10 Years Board Warranty');
     }
-  }, [initialCard, isOpen]);
+  }, [initialCard, isOpen, targetRoomName]);
 
   const handleUnitChange = (newUnit: UnitType) => {
     setUnit(newUnit);
@@ -163,12 +191,16 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
     e.preventDefault();
     if (!name.trim()) return;
 
+    const finalCategory = isCustomCategory && customCategoryInput.trim() 
+      ? (customCategoryInput.trim() as ItemCategory)
+      : (category as ItemCategory);
+
     const finalVariants = enableVariants && variants.length > 0 ? variants : [];
     const selectedVariantId = finalVariants.length > 0 ? finalVariants[0].id : '';
 
     const payload: Omit<ItemCard, 'id'> = {
       name: name.trim(),
-      category,
+      category: finalCategory,
       icon,
       description: description.trim(),
       unit,
@@ -183,9 +215,10 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
         hardware: hardware.trim(),
         warranty: warranty.trim(),
       },
+      isCustom: initialCard?.isCustom !== undefined ? initialCard.isCustom : true,
     };
 
-    onSave(payload, initialCard?.id);
+    onSave(payload, initialCard?.id, targetRoomId);
     onClose();
   };
 
@@ -193,8 +226,18 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={initialCard ? `Edit Catalog Card: ${initialCard.name}` : 'Create New Catalog Item Card'}
-      subtitle="Configure title, rate, measurement units, dimension variants, and specifications."
+      title={
+        initialCard 
+          ? `Edit Catalog Card: ${initialCard.name}` 
+          : targetRoomName 
+          ? `Create Custom Card for ${targetRoomName}`
+          : 'Create Custom Catalog Card'
+      }
+      subtitle={
+        targetRoomName
+          ? `Configure a new custom card that will be added to the catalog and assigned to ${targetRoomName}.`
+          : 'Configure custom card title, base rates, measurement units, dimension variants, and specifications.'
+      }
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4 pb-1">
@@ -202,30 +245,58 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
         {/* Basic Info */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Item Title / Name</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">Item Title / Name</label>
+              {!initialCard && (
+                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Custom Card
+                </span>
+              )}
+            </div>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. TV Unit, Crockery Unit, False Ceiling..."
-              className="w-full px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              placeholder="e.g. Bespoke Fluted TV Console, Vanity Unit, False Ceiling..."
+              className="w-full px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-semibold"
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ItemCategory)}
-              className="w-full px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-1.5">
+              <select
+                value={isCustomCategory ? 'CUSTOM' : category}
+                onChange={(e) => {
+                  if (e.target.value === 'CUSTOM') {
+                    setIsCustomCategory(true);
+                  } else {
+                    setIsCustomCategory(false);
+                    setCategory(e.target.value);
+                  }
+                }}
+                className="w-full px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-medium"
+              >
+                {allCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+                <option value="CUSTOM">+ Enter Custom Category...</option>
+              </select>
+
+              {isCustomCategory && (
+                <input
+                  type="text"
+                  required
+                  value={customCategoryInput}
+                  onChange={(e) => setCustomCategoryInput(e.target.value)}
+                  placeholder="Enter custom category name..."
+                  className="w-full px-3 py-1 text-xs border border-rose-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 bg-rose-50/30"
+                />
+              )}
+            </div>
           </div>
 
           <div>
@@ -233,10 +304,10 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
             <select
               value={scopeType}
               onChange={(e) => setScopeType(e.target.value as ScopeType)}
-              className="w-full px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              className="w-full px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-medium"
             >
-              <option value="expert_pick">Expert Picks (Featured / Recommended)</option>
-              <option value="optional_scope">Optional Scope (Add-on)</option>
+              <option value="expert_pick">⭐ Expert Picks (Featured / Recommended)</option>
+              <option value="optional_scope">💡 Optional Scope (Add-on)</option>
             </select>
           </div>
 
@@ -245,9 +316,9 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
             <select
               value={unit}
               onChange={(e) => handleUnitChange(e.target.value as UnitType)}
-              className="w-full px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              className="w-full px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-medium"
             >
-              <option value="Unit">Unit (Nos)</option>
+              <option value="Unit">Unit (Nos / Piece)</option>
               <option value="Sqft">Sqft (Square Feet)</option>
               <option value="Rft">Rft (Running Feet)</option>
               <option value="Set">Set</option>
@@ -375,19 +446,19 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
         {/* Room Assignment Pills */}
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
-            Assigned Default Rooms (Appears automatically in these rooms)
+            Assigned Preset Rooms (Auto-populates inside these room defaults)
           </label>
-          <div className="flex flex-wrap gap-1">
-            {ROOM_OPTIONS.map((room) => {
+          <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1 bg-slate-50/50 rounded-xl border border-slate-200/60">
+            {dynamicRoomOptions.map((room) => {
               const isSelected = defaultRooms.includes(room);
               return (
                 <button
                   key={room}
                   type="button"
                   onClick={() => toggleRoom(room)}
-                  className={`px-2 py-0.5 text-[11px] font-semibold rounded-md border transition-all ${
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-all ${
                     isSelected
-                      ? 'border-rose-500 bg-rose-50 text-rose-700 font-bold'
+                      ? 'border-rose-500 bg-rose-50 text-rose-700 font-bold shadow-2xs'
                       : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
                   }`}
                 >
@@ -473,9 +544,10 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
           </button>
           <button
             type="submit"
-            className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-md shadow-rose-200 transition-all"
+            className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-md shadow-rose-200 transition-all flex items-center gap-1.5"
           >
-            {initialCard ? 'Save Changes' : 'Create Item Card'}
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{initialCard ? 'Save Changes' : 'Create Custom Card'}</span>
           </button>
         </div>
 

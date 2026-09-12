@@ -9,7 +9,10 @@ import {
   MoreVertical, 
   Layers,
   LayoutGrid,
-  Sparkles
+  Sparkles,
+  GripVertical,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { useCatalog } from '../../context/CatalogContext';
 import { calculateRoomSubtotal } from '../../utils/calculations';
@@ -25,6 +28,8 @@ export const AdminRoomSidebar: React.FC = () => {
     renameAdminRoom,
     deleteAdminRoom,
     duplicateAdminRoom,
+    reorderAdminRooms,
+    moveAdminRoom,
     catalog,
   } = useCatalog();
 
@@ -35,6 +40,10 @@ export const AdminRoomSidebar: React.FC = () => {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomType, setNewRoomType] = useState('bedroom');
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag and drop state
+  const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
+  const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null);
 
   useEffect(() => {
     if (editingRoomId && editInputRef.current) {
@@ -63,6 +72,46 @@ export const AdminRoomSidebar: React.FC = () => {
     } else if (e.key === 'Escape') {
       setEditingRoomId(null);
     }
+  };
+
+  // Drag and Drop handlers for rooms
+  const handleDragStart = (e: React.DragEvent, roomId: string) => {
+    if (editingRoomId) return;
+    setDraggedRoomId(roomId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', roomId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, roomId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedRoomId && draggedRoomId !== roomId && dragOverRoomId !== roomId) {
+      setDragOverRoomId(roomId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, roomId: string) => {
+    e.preventDefault();
+    if (dragOverRoomId === roomId) {
+      setDragOverRoomId(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetRoomId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sourceRoomId = draggedRoomId || e.dataTransfer.getData('text/plain');
+    if (sourceRoomId && sourceRoomId !== targetRoomId) {
+      reorderAdminRooms(sourceRoomId, targetRoomId);
+    }
+    setDraggedRoomId(null);
+    setDragOverRoomId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedRoomId(null);
+    setDragOverRoomId(null);
   };
 
   const handleAddRoomSubmit = (e: React.FormEvent) => {
@@ -125,13 +174,18 @@ export const AdminRoomSidebar: React.FC = () => {
           
           {/* Header */}
           <div className="px-4 py-3 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                ROOM CONFIGURATION
-              </span>
-              <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                {adminRooms.length}
-              </span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  ROOM CONFIGURATION
+                </span>
+                <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                  {adminRooms.length}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                ↕️ Drag to set default sequence
+              </p>
             </div>
             <button
               onClick={() => setIsAddRoomModalOpen(true)}
@@ -142,32 +196,50 @@ export const AdminRoomSidebar: React.FC = () => {
             </button>
           </div>
 
-          {/* Rooms Navigation List */}
+          {/* Rooms Navigation List with Drag-and-Drop */}
           <div className="p-2 space-y-1.5 max-h-[calc(100vh-280px)] overflow-y-auto">
-            {adminRooms.map((room) => {
+            {adminRooms.map((room, roomIndex) => {
               const isActive = room.id === activeAdminRoomId;
               const itemsCount = room.items.length;
               const roomSubtotal = calculateRoomSubtotal(room);
               const hasItems = itemsCount > 0;
               const isEditing = editingRoomId === room.id;
+              const isDraggingThis = draggedRoomId === room.id;
+              const isDragOverThis = dragOverRoomId === room.id && draggedRoomId !== room.id;
 
               return (
                 <div
                   key={room.id}
+                  draggable={!isEditing}
+                  onDragStart={(e) => handleDragStart(e, room.id)}
+                  onDragOver={(e) => handleDragOver(e, room.id)}
+                  onDragLeave={(e) => handleDragLeave(e, room.id)}
+                  onDrop={(e) => handleDrop(e, room.id)}
+                  onDragEnd={handleDragEnd}
                   onClick={() => {
                     if (!isEditing) setActiveAdminRoomId(room.id);
                   }}
-                  className={`relative group rounded-xl p-3 cursor-pointer transition-all border ${
-                    isActive
+                  className={`relative group rounded-xl p-2.5 sm:p-3 cursor-grab active:cursor-grabbing transition-all border select-none ${
+                    isDraggingThis
+                      ? 'opacity-40 scale-95 border-rose-400 border-dashed bg-rose-50/50 shadow-none'
+                      : isDragOverThis
+                      ? 'border-rose-500 ring-2 ring-rose-400/50 bg-rose-50/40 scale-[1.01] shadow-md'
+                      : isActive
                       ? 'bg-blue-50/70 border-blue-200 shadow-xs ring-1 ring-blue-400/30'
                       : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-200/70'
                   }`}
+                  title="Click to view cards or drag up/down to set default room sequence"
                 >
                   <div className="flex items-center justify-between gap-2">
                     
-                    {/* Left: Checkmark Icon Pill + Room Name */}
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {/* Left: Drag Grip + Checkmark Icon Pill + Room Name */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                       
+                      {/* Drag Grip Handle */}
+                      <div className="text-slate-300 group-hover:text-slate-500 hover:text-rose-500 p-0.5 rounded transition-colors shrink-0">
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </div>
+
                       {/* Checkmark box matching screenshot */}
                       <div
                         className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors ${
@@ -246,7 +318,39 @@ export const AdminRoomSidebar: React.FC = () => {
                                 setMenuOpenRoomId(null);
                               }}
                             />
-                            <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-30 animate-fade-in text-xs font-semibold">
+                            <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-30 animate-fade-in text-xs font-semibold">
+                              
+                              {/* Reorder Buttons */}
+                              {roomIndex > 0 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveAdminRoom(room.id, 'up');
+                                    setMenuOpenRoomId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Move Up</span>
+                                </button>
+                              )}
+
+                              {roomIndex < adminRooms.length - 1 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveAdminRoom(room.id, 'down');
+                                    setMenuOpenRoomId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Move Down</span>
+                                </button>
+                              )}
+
+                              <div className="my-1 border-t border-slate-100" />
+
                               <button
                                 onClick={(e) => startEditing(room.id, room.name, e)}
                                 className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-rose-50 hover:text-rose-600 flex items-center gap-2"

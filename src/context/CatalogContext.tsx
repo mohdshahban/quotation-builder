@@ -24,6 +24,8 @@ interface CatalogContextType {
   renameAdminRoom: (roomId: string, newName: string) => void;
   deleteAdminRoom: (roomId: string) => void;
   duplicateAdminRoom: (roomId: string) => void;
+  reorderAdminRooms: (activeRoomId: string, overRoomId: string) => void;
+  moveAdminRoom: (roomId: string, direction: 'up' | 'down') => void;
   addCardToAdminRoom: (roomId: string, card: ItemCard, scopeType?: ScopeType) => void;
   removeCardFromAdminRoom: (roomId: string, cardId: string) => void;
   toggleAdminRoomCardScope: (roomId: string, cardId: string) => void;
@@ -276,6 +278,31 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setActiveAdminRoomId(newId);
   };
 
+  const reorderAdminRooms = (activeRoomId: string, overRoomId: string) => {
+    setAdminRooms(prev => {
+      const fromIndex = prev.findIndex(r => r.id === activeRoomId);
+      const toIndex = prev.findIndex(r => r.id === overRoomId);
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      return updated;
+    });
+  };
+
+  const moveAdminRoom = (roomId: string, direction: 'up' | 'down') => {
+    setAdminRooms(prev => {
+      const index = prev.findIndex(r => r.id === roomId);
+      if (index === -1) return prev;
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(index, 1);
+      updated.splice(targetIndex, 0, moved);
+      return updated;
+    });
+  };
+
   const addCardToAdminRoom = (roomId: string, card: ItemCard, scopeType: ScopeType = 'expert_pick') => {
     setAdminRooms(prev =>
       prev.map(room => {
@@ -432,6 +459,8 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
         renameAdminRoom,
         deleteAdminRoom,
         duplicateAdminRoom,
+        reorderAdminRooms,
+        moveAdminRoom,
         addCardToAdminRoom,
         removeCardFromAdminRoom,
         toggleAdminRoomCardScope,

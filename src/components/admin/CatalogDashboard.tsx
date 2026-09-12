@@ -44,6 +44,7 @@ export const CatalogDashboard: React.FC = () => {
     // Admin Room Presets
     adminRooms,
     activeAdminRoomId,
+    addCardToAdminRoom,
     removeCardFromAdminRoom,
     toggleAdminRoomCardScope,
     toggleAdminRoomCardSelection,
@@ -55,6 +56,7 @@ export const CatalogDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedScope, setSelectedScope] = useState<string>('all');
+  const [customFilterType, setCustomFilterType] = useState<'all' | 'custom_only' | 'standard_only'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // Drag and drop state
@@ -62,6 +64,7 @@ export const CatalogDashboard: React.FC = () => {
   const [dragOverCardId, setDragOverCardId] = useState<string | null>(null);
 
   const [editingCard, setEditingCard] = useState<ItemCard | null>(null);
+  const [customCardTargetRoom, setCustomCardTargetRoom] = useState<{ id: string; name: string } | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isAddCardToRoomOpen, setIsAddCardToRoomOpen] = useState(false);
@@ -85,16 +88,22 @@ export const CatalogDashboard: React.FC = () => {
       card.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || card.category === selectedCategory;
     const matchesScope = selectedScope === 'all' || card.scopeType === selectedScope;
-    return matchesSearch && matchesCategory && matchesScope;
+    const matchesType = 
+      customFilterType === 'all' || 
+      (customFilterType === 'custom_only' && card.isCustom) ||
+      (customFilterType === 'standard_only' && !card.isCustom);
+    return matchesSearch && matchesCategory && matchesScope && matchesType;
   });
 
-  const handleCreateCard = () => {
+  const handleCreateCard = (targetRoom?: { id: string; name: string }) => {
     setEditingCard(null);
+    setCustomCardTargetRoom(targetRoom || null);
     setIsFormModalOpen(true);
   };
 
   const handleEditCard = (card: ItemCard) => {
     setEditingCard(card);
+    setCustomCardTargetRoom(null);
     setIsFormModalOpen(true);
   };
 
@@ -119,14 +128,23 @@ export const CatalogDashboard: React.FC = () => {
     }
   };
 
-  const handleSaveCard = (cardData: Omit<ItemCard, 'id'>, id?: string) => {
+  const handleSaveCard = (cardData: Omit<ItemCard, 'id'>, id?: string, targetRoomId?: string) => {
     if (id) {
       updateCard(id, cardData);
       showNotification(`Updated "${cardData.name}"`);
     } else {
-      addCard(cardData);
-      showNotification(`Created "${cardData.name}"`);
+      const createdCard = addCard(cardData);
+      const effectiveRoomId = targetRoomId || customCardTargetRoom?.id;
+      if (effectiveRoomId) {
+        // Automatically add to the specified admin preset room
+        addCardToAdminRoom(effectiveRoomId, createdCard, cardData.scopeType);
+        const targetRoom = adminRooms.find(r => r.id === effectiveRoomId);
+        showNotification(`Created "${cardData.name}" and added to ${targetRoom?.name || 'room'}`);
+      } else {
+        showNotification(`Created "${cardData.name}"`);
+      }
     }
+    setCustomCardTargetRoom(null);
   };
 
   const handleExportJSON = () => {
@@ -259,7 +277,7 @@ export const CatalogDashboard: React.FC = () => {
         {/* Global Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={handleCreateCard}
+            onClick={() => handleCreateCard()}
             className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md shadow-rose-200 flex items-center gap-1.5 transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -339,11 +357,21 @@ export const CatalogDashboard: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-right">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block leading-tight">Default Total</span>
                     <span className="text-sm font-extrabold text-slate-900">{formatCurrency(calculateRoomSubtotal(activeRoom))}</span>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCreateCard({ id: activeRoom.id, name: activeRoom.name })}
+                    className="px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
+                    title="Create a new custom card specifically for this room"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>+ Custom Card</span>
+                  </button>
 
                   <button
                     type="button"
@@ -375,15 +403,24 @@ export const CatalogDashboard: React.FC = () => {
                   <Layers className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                   <h4 className="text-sm font-bold text-slate-700">No cards assigned to {activeRoom.name} yet</h4>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    Click "Assign Cards" to select items from your catalog that should populate inside this room by default.
+                    Assign existing cards from the catalog or create a brand new custom card tailored for this room.
                   </p>
-                  <button
-                    onClick={() => setIsAddCardToRoomOpen(true)}
-                    className="mt-4 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs inline-flex items-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Assign Cards from Catalog</span>
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 mt-4">
+                    <button
+                      onClick={() => setIsAddCardToRoomOpen(true)}
+                      className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Assign Cards from Catalog</span>
+                    </button>
+                    <button
+                      onClick={() => handleCreateCard({ id: activeRoom.id, name: activeRoom.name })}
+                      className="px-4 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>Create Custom Card for {activeRoom.name}</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -506,15 +543,23 @@ export const CatalogDashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* Add More button at bottom */}
-              <div className="pt-3 border-t border-slate-100">
+              {/* Add More and Create Custom Card buttons at bottom */}
+              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAddCardToRoomOpen(true)}
-                  className="w-full py-3 px-4 border-2 border-dashed border-rose-200 hover:border-rose-400 bg-rose-50/30 hover:bg-rose-50 text-rose-600 font-bold text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 transition-all"
+                  className="flex-1 w-full py-3 px-4 border-2 border-dashed border-rose-200 hover:border-rose-400 bg-rose-50/30 hover:bg-rose-50 text-rose-600 font-bold text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 transition-all shadow-2xs"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Add More Cards to {activeRoom.name}</span>
+                  <span>Assign Cards from Catalog</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCreateCard({ id: activeRoom.id, name: activeRoom.name })}
+                  className="w-full sm:w-auto py-3 px-4 border border-rose-300 hover:border-rose-400 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 transition-all shadow-xs"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Create Custom Card for {activeRoom.name}</span>
                 </button>
               </div>
 
@@ -551,7 +596,7 @@ export const CatalogDashboard: React.FC = () => {
                   />
                 </div>
 
-                {/* Category & Scope Filters */}
+                {/* Category, Scope & Type Filters */}
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <select
                     value={selectedCategory}
@@ -573,6 +618,16 @@ export const CatalogDashboard: React.FC = () => {
                     <option value="all">All Scopes</option>
                     <option value="expert_pick">Expert Picks</option>
                     <option value="optional_scope">Optional Scope</option>
+                  </select>
+
+                  <select
+                    value={customFilterType}
+                    onChange={(e) => setCustomFilterType(e.target.value as any)}
+                    className="text-xs font-semibold px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-rose-500"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="custom_only">✨ Custom Cards Only</option>
+                    <option value="standard_only">Standard Cards Only</option>
                   </select>
 
                   <div className="bg-slate-100 p-0.5 rounded-lg flex items-center border border-slate-200 text-xs font-semibold">
@@ -653,9 +708,16 @@ export const CatalogDashboard: React.FC = () => {
                           </div>
 
                           {/* Title & Description */}
-                          <h4 className="text-sm font-bold text-slate-900 group-hover:text-rose-600 transition-colors line-clamp-1">
-                            {card.name}
-                          </h4>
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="text-sm font-bold text-slate-900 group-hover:text-rose-600 transition-colors line-clamp-1">
+                              {card.name}
+                            </h4>
+                            {card.isCustom && (
+                              <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded shrink-0">
+                                ✨ Custom
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-slate-500 mt-1 line-clamp-2 min-h-[32px]">
                             {card.description || 'No description added.'}
                           </p>
@@ -717,12 +779,12 @@ export const CatalogDashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* Table View with Reorder handles */}
+              {/* Table View of Cards */}
               {viewMode === 'table' && (
-                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200/80 uppercase text-[10px] tracking-wider">
                         <tr>
                           <th className="px-3 py-3 w-8">#</th>
                           <th className="px-4 py-3">Card Name</th>
@@ -762,6 +824,11 @@ export const CatalogDashboard: React.FC = () => {
                               <td className="px-4 py-3 flex items-center gap-2 font-bold text-slate-900">
                                 <ItemIconRenderer name={card.icon} className="w-4 h-4 text-rose-600 shrink-0" />
                                 <span className="truncate max-w-[200px]">{card.name}</span>
+                                {card.isCustom && (
+                                  <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded shrink-0">
+                                    Custom
+                                  </span>
+                                )}
                               </td>
                               <td className="px-4 py-3 text-slate-600">{card.category}</td>
                               <td className="px-4 py-3">
@@ -816,9 +883,14 @@ export const CatalogDashboard: React.FC = () => {
       {/* Add / Edit Card Form Modal */}
       <ItemFormModal
         isOpen={isFormModalOpen}
-        onClose={() => setIsFormModalOpen(false)}
+        onClose={() => {
+          setIsFormModalOpen(false);
+          setCustomCardTargetRoom(null);
+        }}
         onSave={handleSaveCard}
         initialCard={editingCard}
+        targetRoomName={customCardTargetRoom?.name || (activeRoom ? activeRoom.name : undefined)}
+        targetRoomId={customCardTargetRoom?.id || (activeRoom ? activeRoom.id : undefined)}
       />
 
       {/* Bulk Rate Modal */}
@@ -834,6 +906,7 @@ export const CatalogDashboard: React.FC = () => {
           onClose={() => setIsAddCardToRoomOpen(false)}
           roomId={activeRoom.id}
           roomName={activeRoom.name}
+          onCreateCustomCard={() => handleCreateCard({ id: activeRoom.id, name: activeRoom.name })}
         />
       )}
 
