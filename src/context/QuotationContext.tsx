@@ -33,7 +33,7 @@ interface QuotationContextType {
 const QuotationContext = createContext<QuotationContextType | undefined>(undefined);
 
 export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { catalog } = useCatalog();
+  const { catalog, adminRooms } = useCatalog();
   const { activeProject, saveActiveProjectRooms, saveActiveProjectDetails } = useWorkspace();
 
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>(
@@ -41,7 +41,7 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 
   const [rooms, setRooms] = useState<Room[]>(
-    activeProject?.rooms || generateDefaultRooms(catalog)
+    activeProject?.rooms || generateDefaultRooms(catalog, adminRooms)
   );
 
   const [activeRoomId, setActiveRoomId] = useState<string>(
@@ -316,7 +316,7 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const resetQuotationToDefaults = () => {
-    const defaultR = generateDefaultRooms(catalog);
+    const defaultR = generateDefaultRooms(catalog, adminRooms);
     setRooms(defaultR);
     setProjectDetails(DEFAULT_PROJECT_DETAILS);
     saveActiveProjectRooms(defaultR);

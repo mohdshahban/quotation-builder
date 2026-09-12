@@ -62,13 +62,42 @@ export const createConfiguredItemFromCard = (card: ItemCard, overrideQty?: numbe
   };
 };
 
-export const generateDefaultRooms = (catalog: ItemCard[] = DEFAULT_CATALOG): Room[] => {
-  const getCardsForRoom = (roomName: string, roomType: string): ItemCard[] => {
-    return catalog.filter(card => 
-      card.defaultRooms.includes('*') || 
-      card.defaultRooms.includes(roomName) ||
-      card.defaultRooms.some(r => r.toLowerCase() === roomType.toLowerCase())
-    );
+export const generateDefaultRooms = (catalog: ItemCard[] = DEFAULT_CATALOG, templateRooms?: Room[]): Room[] => {
+  // If admin has defined custom template rooms, instantiate fresh copies of them
+  if (templateRooms && templateRooms.length > 0) {
+    return templateRooms.map(r => ({
+      ...r,
+      id: `room-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      items: r.items.map(item => {
+        const latestCard = catalog.find(c => c.id === item.cardId);
+        const latestVariant = latestCard?.variants.find(v => v.id === item.selectedVariantId);
+        const rate = latestVariant ? latestVariant.rate : (latestCard ? latestCard.baseRate : item.unitRate);
+        return {
+          ...item,
+          id: `cfg-${item.cardId}-${Math.random().toString(36).substring(2, 9)}`,
+          unitRate: rate,
+          calculatedPrice: item.quantity * rate,
+        };
+      }),
+    }));
+  }
+
+  const buildItemsForRoom = (specs: { id: string; qty: number; sel: boolean; variantId?: string }[]) => {
+    return specs.map(s => {
+      const card = catalog.find(c => c.id === s.id);
+      if (!card) return null;
+      const item = createConfiguredItemFromCard(card, s.qty, s.sel);
+      if (s.variantId) {
+        const v = card.variants.find(vr => vr.id === s.variantId);
+        if (v) {
+          item.selectedVariantId = v.id;
+          item.selectedVariantName = v.name;
+          item.unitRate = v.rate;
+          item.calculatedPrice = item.quantity * v.rate;
+        }
+      }
+      return item;
+    }).filter(Boolean) as ConfiguredItem[];
   };
 
   // 1. Living Room (11 items matching screenshot)
@@ -89,24 +118,6 @@ export const generateDefaultRooms = (catalog: ItemCard[] = DEFAULT_CATALOG): Roo
     { id: 'card-designer-curtains', qty: 2, sel: false, variantId: 'v-curt-manual' },
     { id: 'card-balcony-deck', qty: 65, sel: false, variantId: 'v-bal-grass' },
   ];
-
-  const buildItemsForRoom = (specs: { id: string; qty: number; sel: boolean; variantId?: string }[]) => {
-    return specs.map(s => {
-      const card = catalog.find(c => c.id === s.id);
-      if (!card) return null;
-      const item = createConfiguredItemFromCard(card, s.qty, s.sel);
-      if (s.variantId) {
-        const v = card.variants.find(vr => vr.id === s.variantId);
-        if (v) {
-          item.selectedVariantId = v.id;
-          item.selectedVariantName = v.name;
-          item.unitRate = v.rate;
-          item.calculatedPrice = item.quantity * v.rate;
-        }
-      }
-      return item;
-    }).filter(Boolean) as ConfiguredItem[];
-  };
 
   const livingRoom: Room = {
     id: 'room-living',
@@ -240,5 +251,22 @@ export const generateDefaultRooms = (catalog: ItemCard[] = DEFAULT_CATALOG): Roo
     items: buildItemsForRoom(washroom2Cards),
   };
 
-  return [livingRoom, masterBedroom, kidsRoom, bedroom, washroom1, foyer, washroom2];
+  // 8. Kitchen (1 item added matching screenshot)
+  const kitchenCards = [
+    { id: 'card-modular-kitchen-l', qty: 1, sel: true, variantId: 'v-kt-acrylic' },
+    { id: 'card-false-ceiling', qty: 85, sel: true, variantId: 'v-fc-gyp' },
+    { id: 'card-fc-electrical', qty: 85, sel: true, variantId: 'v-fce-std' },
+    { id: 'card-crockery-unit', qty: 1, sel: false, variantId: 'v-cr-6x5' },
+  ];
+
+  const kitchen: Room = {
+    id: 'room-kitchen',
+    name: 'Kitchen',
+    type: 'kitchen',
+    icon: 'Utensils',
+    areaSqft: 85,
+    items: buildItemsForRoom(kitchenCards),
+  };
+
+  return [livingRoom, masterBedroom, kidsRoom, bedroom, washroom1, foyer, washroom2, kitchen];
 };
