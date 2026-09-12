@@ -96,6 +96,26 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
       id: `card-custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     };
     setCatalog(prev => [newCard, ...prev]);
+
+    // Automatically add this new card to relevant admin room templates
+    setAdminRooms(prev =>
+      prev.map(room => {
+        const matches = 
+          newCard.defaultRooms.includes('*') ||
+          newCard.defaultRooms.some(
+            r => r.toLowerCase() === room.name.toLowerCase() || r.toLowerCase() === (room.type || '').toLowerCase()
+          );
+        if (matches) {
+          const newItem = createConfiguredItemFromCard(newCard, undefined, newCard.scopeType === 'expert_pick');
+          return {
+            ...room,
+            items: [...room.items, newItem],
+          };
+        }
+        return room;
+      })
+    );
+
     return newCard;
   };
 
@@ -109,7 +129,7 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
       })
     );
 
-    // Sync changes to admin room items referencing this card
+    // Sync all card field updates (scopeType, rate, name, icon, unit, specs) to admin room items referencing this card
     setAdminRooms(prev =>
       prev.map(room => ({
         ...room,
@@ -121,8 +141,12 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
               name: updatedFields.name !== undefined ? updatedFields.name : i.name,
               category: updatedFields.category !== undefined ? updatedFields.category : i.category,
               description: updatedFields.description !== undefined ? updatedFields.description : i.description,
+              icon: updatedFields.icon !== undefined ? updatedFields.icon : i.icon,
+              unit: updatedFields.unit !== undefined ? updatedFields.unit : i.unit,
+              scopeType: updatedFields.scopeType !== undefined ? updatedFields.scopeType : i.scopeType,
               unitRate: newRate,
               calculatedPrice: i.quantity * newRate,
+              materialSpec: updatedFields.materialSpec !== undefined ? updatedFields.materialSpec : i.materialSpec,
             };
           }
           return i;

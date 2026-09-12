@@ -99,18 +99,25 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const latestVariant = latestCard?.variants.find(v => v.id === selectedVariantId);
           const rate = latestVariant ? latestVariant.rate : (latestCard ? latestCard.baseRate : adminItem.unitRate);
           const qty = existingItem ? existingItem.quantity : adminItem.quantity;
-          const isSelected = existingItem !== undefined ? existingItem.isSelected : adminItem.isSelected;
+          const isSelected = adminItem.isSelected !== undefined ? adminItem.isSelected : (existingItem !== undefined ? existingItem.isSelected : (latestCard?.scopeType === 'expert_pick'));
 
           return {
             ...adminItem,
             id: existingItem ? existingItem.id : (adminItem.id || `cfg-${adminItem.cardId}-${Math.random().toString(36).substring(2, 9)}`),
+            name: latestCard?.name || adminItem.name,
+            category: latestCard?.category || adminItem.category,
+            description: latestCard?.description || adminItem.description,
+            unit: latestCard?.unit || adminItem.unit,
+            icon: latestCard?.icon || adminItem.icon,
             quantity: qty,
             unitRate: rate,
             calculatedPrice: qty * rate,
             isSelected: isSelected,
             selectedVariantId: selectedVariantId,
             selectedVariantName: latestVariant?.name || adminItem.selectedVariantName,
-            scopeType: adminItem.scopeType,
+            scopeType: adminItem.scopeType || latestCard?.scopeType || 'expert_pick',
+            materialSpec: latestCard?.materialSpec || adminItem.materialSpec,
+            isCustom: latestCard?.isCustom || adminItem.isCustom || false,
           };
         });
 
