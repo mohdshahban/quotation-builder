@@ -12,15 +12,17 @@ import {
   LayoutDashboard,
   Crown,
   Plus,
-  Check,
-  User,
-  Shield,
-  Briefcase
+  Check, 
+  User, 
+  Shield, 
+  Briefcase,
+  Cloud
 } from 'lucide-react';
 import { useWorkspace, NavView } from '../../context/WorkspaceContext';
 import { useQuotation } from '../../context/QuotationContext';
 import { formatCurrency } from '../../utils/currency';
 import { ProjectDetailsModal } from '../project/ProjectDetailsModal';
+import { SupabaseSyncModal } from './SupabaseSyncModal';
 import { UserRole } from '../../types/settings';
 
 interface HeaderProps {
@@ -50,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   const projectDropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
@@ -288,6 +291,18 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
+              {/* Supabase Cloud Sync Pill */}
+              <button
+                type="button"
+                onClick={() => setIsSupabaseModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100/90 text-emerald-800 border border-emerald-200/90 rounded-xl text-xs font-bold transition-all shadow-2xs group"
+                title="Supabase Cloud Sync & Database Diagnostics"
+              >
+                <Cloud className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Cloud Sync</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </button>
+
               {/* Enterprise / Settings Pill */}
               <button
                 type="button"
@@ -451,6 +466,12 @@ export const Header: React.FC<HeaderProps> = ({
       <ProjectDetailsModal
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}
+      />
+
+      {/* Supabase Cloud Sync Modal */}
+      <SupabaseSyncModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
       />
     </>
   );
