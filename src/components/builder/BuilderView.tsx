@@ -6,7 +6,8 @@ import { ScopeSection } from './ScopeSection';
 import { BottomBar } from './BottomBar';
 import { CustomItemModal } from './CustomItemModal';
 import { AddFromCatalogModal } from './AddFromCatalogModal';
-import { Sparkles, Plus, Layers, Edit3 } from 'lucide-react';
+import { MaterialSpecModal } from './MaterialSpecModal';
+import { Sparkles, Plus, Layers, Edit3, Shield } from 'lucide-react';
 import { calculateRoomSubtotal, countRoomSelectedItems } from '../../utils/calculations';
 import { formatCurrency } from '../../utils/currency';
 
@@ -22,6 +23,7 @@ export const BuilderView: React.FC<BuilderViewProps> = ({ onGoToSummary }) => {
 
   const [isAddCustomModalOpen, setIsAddCustomModalOpen] = useState(false);
   const [isAddCatalogModalOpen, setIsAddCatalogModalOpen] = useState(false);
+  const [isMaterialSpecModalOpen, setIsMaterialSpecModalOpen] = useState(false);
   const [isRenamingHeader, setIsRenamingHeader] = useState(false);
   const [headerNameInput, setHeaderNameInput] = useState('');
 
@@ -120,11 +122,21 @@ export const BuilderView: React.FC<BuilderViewProps> = ({ onGoToSummary }) => {
               </div>
 
               {/* Action Buttons & Room Subtotal Pill */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                 <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-right">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block leading-tight">Room Total</span>
                   <span className="text-sm font-extrabold text-slate-900">{formatCurrency(roomSubtotal)}</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMaterialSpecModalOpen(true)}
+                  className="px-3 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs"
+                  title="Configure Material Standards & Brands"
+                >
+                  <Shield className="w-3.5 h-3.5 text-rose-500" />
+                  <span className="hidden sm:inline">Materials</span>
+                </button>
 
                 <button
                   type="button"
@@ -181,6 +193,12 @@ export const BuilderView: React.FC<BuilderViewProps> = ({ onGoToSummary }) => {
         isOpen={isAddCatalogModalOpen}
         onClose={() => setIsAddCatalogModalOpen(false)}
         roomId={activeRoom.id}
+      />
+
+      {/* Material Specifications Modal */}
+      <MaterialSpecModal
+        isOpen={isMaterialSpecModalOpen}
+        onClose={() => setIsMaterialSpecModalOpen(false)}
       />
 
     </div>

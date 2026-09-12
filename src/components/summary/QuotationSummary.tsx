@@ -1,15 +1,22 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useQuotation } from '../../context/QuotationContext';
 import { useCatalog } from '../../context/CatalogContext';
 import { formatCurrency } from '../../utils/currency';
 import { StepHeader } from '../builder/StepHeader';
+import { MaterialSpecModal } from '../builder/MaterialSpecModal';
+import { exportBoQToCSV, generateWhatsAppShareUrl } from '../../utils/exportUtils';
 import { 
   Printer, 
   ArrowLeft, 
   Sparkles, 
   ShieldCheck, 
   Clock, 
-  Share2
+  Share2,
+  FileSpreadsheet,
+  MessageSquare,
+  Shield,
+  Layers,
+  ChevronDown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -21,6 +28,7 @@ export const QuotationSummary: React.FC<QuotationSummaryProps> = ({ onBackToBuil
   const { projectDetails, updateProjectDetails, rooms, calculations, setActiveStep } = useQuotation();
   const { catalog } = useCatalog();
   const printRef = useRef<HTMLDivElement>(null);
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
 
   const getCatalogOrderIndex = (cardId: string) => {
     const index = catalog.findIndex((c) => c.id === cardId);
@@ -48,6 +56,20 @@ export const QuotationSummary: React.FC<QuotationSummaryProps> = ({ onBackToBuil
     }
   };
 
+  const handleWhatsAppShare = () => {
+    const url = generateWhatsAppShareUrl(
+      projectDetails.clientPhone,
+      projectDetails,
+      calculations.grandTotal,
+      rooms.length
+    );
+    window.open(url, '_blank');
+  };
+
+  const handleExportBoQ = () => {
+    exportBoQToCSV(projectDetails, rooms);
+  };
+
   const activeRoomsWithItems = rooms.filter(r => r.items.some(i => i.isSelected));
 
   return (
@@ -59,7 +81,7 @@ export const QuotationSummary: React.FC<QuotationSummaryProps> = ({ onBackToBuil
       </div>
 
       {/* Top Action Bar */}
-      <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-rose-100 shadow-sm">
+      <div className="no-print flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-rose-100 shadow-sm">
         <button
           onClick={() => {
             setActiveStep(2);
@@ -71,7 +93,7 @@ export const QuotationSummary: React.FC<QuotationSummaryProps> = ({ onBackToBuil
           <span>Back to Room Configuration</span>
         </button>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Tier Selector */}
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
             {(['Essential', 'Premium', 'Luxury'] as const).map((tier) => (
@@ -89,20 +111,52 @@ export const QuotationSummary: React.FC<QuotationSummaryProps> = ({ onBackToBuil
             ))}
           </div>
 
+          {/* Material Specs Trigger */}
           <button
-            onClick={handleShare}
-            className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-xs flex items-center gap-1.5 transition-all"
+            onClick={() => setIsMaterialModalOpen(true)}
+            className="px-3 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-rose-50 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-xl shadow-xs flex items-center gap-1.5 transition-all"
+            title="Configure Material Standards & Brands"
           >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Share</span>
+            <Shield className="w-3.5 h-3.5 text-rose-500" />
+            <span>Materials</span>
           </button>
 
+          {/* Export BoQ CSV */}
+          <button
+            onClick={handleExportBoQ}
+            className="px-3 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 rounded-xl shadow-xs flex items-center gap-1.5 transition-all"
+            title="Download Bill of Quantities CSV spreadsheet"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>BoQ (CSV)</span>
+          </button>
+
+          {/* WhatsApp Share */}
+          <button
+            onClick={handleWhatsAppShare}
+            className="px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl shadow-xs flex items-center gap-1.5 transition-all"
+            title="Share Proposal via WhatsApp"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>WhatsApp</span>
+          </button>
+
+          {/* Copy Summary */}
+          <button
+            onClick={handleShare}
+            className="px-3 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-xs flex items-center gap-1.5 transition-all"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Copy</span>
+          </button>
+
+          {/* Print / PDF */}
           <button
             onClick={handlePrint}
-            className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md shadow-rose-200 flex items-center gap-1.5 transition-all"
+            className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 rounded-xl shadow-md shadow-rose-200 flex items-center gap-1.5 transition-all"
           >
             <Printer className="w-4 h-4" />
-            <span>Print / Export PDF</span>
+            <span>Print / PDF</span>
           </button>
         </div>
       </div>
@@ -365,6 +419,12 @@ export const QuotationSummary: React.FC<QuotationSummaryProps> = ({ onBackToBuil
         </div>
 
       </div>
+
+      {/* Material Specification Modal */}
+      <MaterialSpecModal
+        isOpen={isMaterialModalOpen}
+        onClose={() => setIsMaterialModalOpen(false)}
+      />
 
     </div>
   );

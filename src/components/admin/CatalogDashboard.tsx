@@ -3,6 +3,7 @@ import { useCatalog } from '../../context/CatalogContext';
 import { ItemCard, ScopeType } from '../../types/catalog';
 import { ItemIconRenderer } from '../../utils/iconMap';
 import { formatCurrency } from '../../utils/currency';
+import { exportCatalogToCSV } from '../../utils/exportUtils';
 import { ItemFormModal } from './ItemFormModal';
 import { BulkRateModal } from './BulkRateModal';
 import { 
@@ -19,7 +20,8 @@ import {
   Layers,
   CheckCircle2,
   GripVertical,
-  Move
+  Move,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export const CatalogDashboard: React.FC = () => {
@@ -118,6 +120,11 @@ export const CatalogDashboard: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
     showNotification('Catalog exported to JSON file');
+  };
+
+  const handleExportCSV = () => {
+    exportCatalogToCSV(catalog);
+    showNotification('Catalog rate list exported to CSV');
   };
 
   const handleImportClick = () => {
@@ -242,6 +249,15 @@ export const CatalogDashboard: React.FC = () => {
           >
             <TrendingUp className="w-4 h-4 text-rose-600" />
             <span>Bulk Rate Update</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="px-3 py-2 text-xs font-bold text-slate-700 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 rounded-xl flex items-center gap-1.5 transition-all"
+            title="Export Catalog to CSV spreadsheet"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Export CSV</span>
           </button>
 
           <button

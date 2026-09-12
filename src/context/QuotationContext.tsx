@@ -3,6 +3,7 @@ import { ConfiguredItem, ProjectDetails, QuotationCalculation, Room } from '../t
 import { DEFAULT_PROJECT_DETAILS, generateDefaultRooms, createConfiguredItemFromCard } from '../data/defaultRooms';
 import { calculateItemTotal, calculateQuotation } from '../utils/calculations';
 import { useCatalog } from './CatalogContext';
+import { useWorkspace } from './WorkspaceContext';
 import { ItemCard, ScopeType } from '../types/catalog';
 
 interface QuotationContextType {
@@ -29,58 +30,34 @@ interface QuotationContextType {
   calculations: QuotationCalculation;
 }
 
-const LOCAL_STORAGE_PROJECT_KEY = 'interior_quotation_project_v1';
-const LOCAL_STORAGE_ROOMS_KEY = 'interior_quotation_rooms_v1';
-
 const QuotationContext = createContext<QuotationContextType | undefined>(undefined);
 
 export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { catalog } = useCatalog();
+  const { activeProject, saveActiveProjectRooms, saveActiveProjectDetails } = useWorkspace();
 
-  const [projectDetails, setProjectDetails] = useState<ProjectDetails>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_PROJECT_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to parse saved project details:', e);
-    }
-    return DEFAULT_PROJECT_DETAILS;
-  });
+  const [projectDetails, setProjectDetails] = useState<ProjectDetails>(
+    activeProject?.projectDetails || DEFAULT_PROJECT_DETAILS
+  );
 
-  const [rooms, setRooms] = useState<Room[]>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_ROOMS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to parse saved rooms:', e);
-    }
-    return generateDefaultRooms(catalog);
-  });
+  const [rooms, setRooms] = useState<Room[]>(
+    activeProject?.rooms || generateDefaultRooms(catalog)
+  );
 
-  const [activeRoomId, setActiveRoomId] = useState<string>(() => {
-    return rooms[0]?.id || 'room-living';
-  });
+  const [activeRoomId, setActiveRoomId] = useState<string>(
+    activeProject?.rooms[0]?.id || 'room-living'
+  );
 
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(2); // Default to Step 2 (Scope of Work matching screenshot)
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(2); // Default to Step 2 (Scope of Work)
 
+  // Synchronize when active project in workspace changes
   useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_PROJECT_KEY, JSON.stringify(projectDetails));
-    } catch (e) {
-      console.error('Failed to save project details to localStorage:', e);
+    if (activeProject) {
+      setProjectDetails(activeProject.projectDetails);
+      setRooms(activeProject.rooms);
+      setActiveRoomId(activeProject.rooms[0]?.id || 'room-living');
     }
-  }, [projectDetails]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_ROOMS_KEY, JSON.stringify(rooms));
-    } catch (e) {
-      console.error('Failed to save rooms to localStorage:', e);
-    }
-  }, [rooms]);
+  }, [activeProject?.id]);
 
   // Keep activeRoomId valid if rooms change
   useEffect(() => {
@@ -92,14 +69,20 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const activeRoom = rooms.find(r => r.id === activeRoomId) || rooms[0];
 
   const updateProjectDetails = (details: Partial<ProjectDetails>) => {
-    setProjectDetails(prev => ({ ...prev, ...details }));
+    setProjectDetails(prev => {
+      const updated = { ...prev, ...details };
+      saveActiveProjectDetails(updated);
+      return updated;
+    });
   };
 
   const renameRoom = (roomId: string, newName: string) => {
     if (!newName.trim()) return;
-    setRooms(prev =>
-      prev.map(r => (r.id === roomId ? { ...r, name: newName.trim() } : r))
-    );
+    setRooms(prev => {
+      const updated = prev.map(r => (r.id === roomId ? { ...r, name: newName.trim() } : r));
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const addRoom = (name: string, type: string = 'custom', icon: string = 'Home'): string => {
@@ -123,7 +106,11 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       areaSqft: 150,
     };
 
-    setRooms(prev => [...prev, newRoom]);
+    setRooms(prev => {
+      const updated = [...prev, newRoom];
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
     setActiveRoomId(newRoomId);
     return newRoomId;
   };
@@ -135,6 +122,7 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     const remaining = rooms.filter(r => r.id !== roomId);
     setRooms(remaining);
+    saveActiveProjectRooms(remaining);
     if (activeRoomId === roomId) {
       setActiveRoomId(remaining[0]?.id || '');
     }
@@ -155,13 +143,17 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       })),
     };
 
-    setRooms(prev => [...prev, duplicatedRoom]);
+    setRooms(prev => {
+      const updated = [...prev, duplicatedRoom];
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
     setActiveRoomId(newId);
   };
 
   const toggleItemSelection = (roomId: string, itemId: string, isSelected?: boolean) => {
-    setRooms(prev =>
-      prev.map(room => {
+    setRooms(prev => {
+      const updated = prev.map(room => {
         if (room.id !== roomId) return room;
         return {
           ...room,
@@ -174,14 +166,16 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             };
           }),
         };
-      })
-    );
+      });
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const updateItemQuantity = (roomId: string, itemId: string, quantity: number) => {
     const validQty = isNaN(quantity) || quantity < 0 ? 0 : quantity;
-    setRooms(prev =>
-      prev.map(room => {
+    setRooms(prev => {
+      const updated = prev.map(room => {
         if (room.id !== roomId) return room;
         return {
           ...room,
@@ -195,13 +189,15 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             };
           }),
         };
-      })
-    );
+      });
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const updateItemVariant = (roomId: string, itemId: string, variantId: string) => {
-    setRooms(prev =>
-      prev.map(room => {
+    setRooms(prev => {
+      const updated = prev.map(room => {
         if (room.id !== roomId) return room;
         return {
           ...room,
@@ -224,13 +220,15 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             };
           }),
         };
-      })
-    );
+      });
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const toggleScopeAll = (roomId: string, scopeType: ScopeType, selectAll: boolean) => {
-    setRooms(prev =>
-      prev.map(room => {
+    setRooms(prev => {
+      const updated = prev.map(room => {
         if (room.id !== roomId) return room;
         return {
           ...room,
@@ -241,15 +239,16 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             return item;
           }),
         };
-      })
-    );
+      });
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const addItemToRoomFromCatalog = (roomId: string, card: ItemCard) => {
-    setRooms(prev =>
-      prev.map(room => {
+    setRooms(prev => {
+      const updated = prev.map(room => {
         if (room.id !== roomId) return room;
-        // Check if already in room
         const existing = room.items.find(i => i.cardId === card.id);
         if (existing) {
           return {
@@ -262,8 +261,10 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           ...room,
           items: [...room.items, newItem],
         };
-      })
-    );
+      });
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const addCustomItemToRoom = (roomId: string, itemData: Partial<ConfiguredItem>) => {
@@ -275,7 +276,7 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       name: itemData.name || 'Custom Interior Item',
       category: itemData.category || 'Modular Woodwork',
       icon: itemData.icon || 'Sparkles',
-      description: itemData.description || 'Custom crafted specification',
+      description: itemData.description || 'Custom bespoke design',
       unit: itemData.unit || 'Unit',
       quantity: qty,
       selectedVariantId: '',
@@ -287,37 +288,41 @@ export const QuotationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       isCustom: true,
     };
 
-    setRooms(prev =>
-      prev.map(room => {
+    setRooms(prev => {
+      const updated = prev.map(room => {
         if (room.id !== roomId) return room;
         return {
           ...room,
           items: [newItem, ...room.items],
         };
-      })
-    );
+      });
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const removeItemFromRoom = (roomId: string, itemId: string) => {
-    setRooms(prev =>
-      prev.map(room => {
+    setRooms(prev => {
+      const updated = prev.map(room => {
         if (room.id !== roomId) return room;
         return {
           ...room,
           items: room.items.filter(i => i.id !== itemId),
         };
-      })
-    );
+      });
+      saveActiveProjectRooms(updated);
+      return updated;
+    });
   };
 
   const resetQuotationToDefaults = () => {
     const defaultR = generateDefaultRooms(catalog);
     setRooms(defaultR);
     setProjectDetails(DEFAULT_PROJECT_DETAILS);
+    saveActiveProjectRooms(defaultR);
+    saveActiveProjectDetails(DEFAULT_PROJECT_DETAILS);
     setActiveRoomId(defaultR[0]?.id || 'room-living');
     setActiveStep(2);
-    localStorage.removeItem(LOCAL_STORAGE_PROJECT_KEY);
-    localStorage.removeItem(LOCAL_STORAGE_ROOMS_KEY);
   };
 
   const calculations = calculateQuotation(rooms, projectDetails);
